@@ -1267,6 +1267,14 @@ function init() {
   }
   document.documentElement.setAttribute('data-theme', STATE.ui.theme);
 
+  // First-load: if the current match has no runtime XI yet, auto-populate so the pitch isn't empty.
+  if (STATE.ui.matchId) {
+    const rt = getRuntime(STATE.ui.matchId);
+    if (!rt.onPitch.length && !rt.bench.length) {
+      autoPopulate(STATE.ui.matchId, STATE.ui.formationKey);
+    }
+  }
+
   $('#matchSelect').addEventListener('change', (e) => {
     STATE.ui.matchId = e.target.value;
     save();
