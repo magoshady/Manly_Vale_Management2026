@@ -6,6 +6,7 @@
 const STORAGE_KEY = 'manly-vale-matchday-v1';
 
 const DEFAULT_SHEET_ID = '1icq6EY1_dcMObs-bz_rLubiAKCLy9BWZugoushT-tns';
+const DEFAULT_SHEET_RANGE = 'A1:AI30';
 
 const DEFAULT_SQUAD = [
   ['Carlos Tanco', 'GK'],
@@ -148,6 +149,7 @@ const STATE = {
     formationKey: '442-diamond',
     theme: window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
     sheetId: DEFAULT_SHEET_ID,
+    sheetRange: DEFAULT_SHEET_RANGE,
   },
   // Per-match runtime: indexed by matchId
   runtimes: {},
@@ -1025,6 +1027,7 @@ function fillSetupInputs() {
   $('#squadInput').value = STATE.squad.map(p => `${p.name} / ${p.role}`).join('\n');
   $('#fixturesInput').value = STATE.fixtures.map(f => `${f.date} / ${f.label}`).join('\n');
   $('#sheetIdInput').value = STATE.ui.sheetId || '';
+  $('#sheetRangeInput').value = STATE.ui.sheetRange || DEFAULT_SHEET_RANGE;
   buildAvailabilityMatchSelect();
   renderAvailabilityGrid();
 }
@@ -1156,25 +1159,27 @@ function syncRuntimeAvailability() {
 async function syncFromSheet() {
   const id = ($('#sheetIdInput')?.value || STATE.ui.sheetId || '').trim();
   if (!id) { toast('Add a Sheet ID first'); return; }
+  const range = ($('#sheetRangeInput')?.value || STATE.ui.sheetRange || DEFAULT_SHEET_RANGE).trim();
   STATE.ui.sheetId = id;
-  const url = `https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv`;
+  STATE.ui.sheetRange = range;
+  const url = `https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&range=${encodeURIComponent(range)}`;
   clearSyncLog();
-  syncLog(`Fetching sheet ${id}...`);
+  syncLog(`Fetching ${id} range ${range}...`);
   const btn = $('#syncBtn'); btn?.classList.add('spin');
   try {
     const resp = await fetch(url, { mode: 'cors' });
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const csv = await resp.text();
     syncLog(`Got ${csv.length} chars. Parsing...`);
-    const matched = applySheetCsv(csv);
-    syncLog(`Updated availability for ${matched.players} players across ${matched.matches} matches.`);
+    const result = applySheetCsv(csv);
+    syncLog(`✓ ${result.players} players, ${result.matches} fixtures synced.`);
     save();
     render();
-    toast(`Sheet sync ✓ ${matched.players} players, ${matched.matches} matches`);
+    toast(`Synced: ${result.players} players · ${result.matches} fixtures`);
   } catch (err) {
     console.error(err);
     syncLog(`ERROR: ${err.message}\nMake sure the sheet is shared as "Anyone with the link can view".`);
-    toast('Sync failed — check sync log in Setup → Sheet');
+    toast('Sync failed — see Setup → Sheet');
   } finally {
     btn?.classList.remove('spin');
   }
@@ -1208,87 +1213,143 @@ function parseCsv(text) {
 
 function normaliseAvailCell(value) {
   const v = (value || '').trim().toUpperCase();
-  if (!v) return null;
+  if (!v) return 'N'; // empty cell = not available
   if (v === 'Y' || v === 'YES') return 'Y';
   if (v === 'B' || v === 'BEER' || v === 'BEERS') return 'B';
   if (v === 'TBC' || v === '?') return 'TBC';
   if (v === 'N' || v === 'NO' || v === 'AWAY' || v === 'INJ' || v === 'INJURED' || v === 'NP' || v.includes('NOT')) return 'N';
-  return null;
+  return 'N';
+}
+
+function parseSheetDate(text) {
+  const t = (text || '').trim();
+  if (!t) return null;
+  // Australian DD/MM/YYYY (or D/M/YYYY)
+  const m = t.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})$/);
+  if (!m) return null;
+  let [, d, mo, y] = m;
+  if (y.length === 2) y = '20' + y;
+  return `${y}-${String(mo).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+}
+
+function findRowByLabel(rows, label, col = 2) {
+  const target = label.toLowerCase().trim();
+  for (let i = 0; i < rows.length; i++) {
+    if ((rows[i][col] || '').toLowerCase().trim() === target) return i;
+  }
+  return -1;
+}
+
+function buildFixtureLabel(round, opponent, venue) {
+  const opp = (opponent || '').trim();
+  const r = (round || '').trim();
+  if (r === 'SF') return opp ? `Semi-final — ${opp}` : 'Semi-final';
+  if (r === 'F') return opp ? `Final — ${opp}` : 'Final';
+  if (/^-\d+$/.test(r)) return opp ? `Trial ${Math.abs(parseInt(r,10))} — ${opp}` : `Trial ${Math.abs(parseInt(r,10))}`;
+  if (/^\d+$/.test(r)) return opp ? `Round ${r} — ${opp}` : `Round ${r}`;
+  return opp || venue || 'Match';
 }
 
 function applySheetCsv(csv) {
   const rows = parseCsv(csv);
-  if (!rows.length) return { players: 0, matches: 0 };
-  // Heuristic: find a row that contains many of our known player names
-  const nameLookup = new Map(STATE.squad.map(p => [p.name.toLowerCase().trim(), p]));
-  // For each row, count how many cells match a player name → that column is the "name column"
-  let nameColumn = -1;
-  let bestMatchCount = 0;
-  rows.forEach(row => {
-    row.forEach((cell, colIdx) => {
-      const key = (cell || '').toLowerCase().trim();
-      if (nameLookup.has(key)) {
-        // Count player matches in this column across the whole sheet
-        const count = rows.reduce((acc, r) => {
-          const v = (r[colIdx] || '').toLowerCase().trim();
-          return acc + (nameLookup.has(v) ? 1 : 0);
-        }, 0);
-        if (count > bestMatchCount) {
-          bestMatchCount = count;
-          nameColumn = colIdx;
-        }
-      }
-    });
-  });
-  if (nameColumn === -1 || bestMatchCount < 3) {
-    syncLog('Could not locate a player-name column. Aborting.');
+  if (!rows.length) { syncLog('Empty CSV.'); return { players: 0, matches: 0 }; }
+
+  // Locate header rows by their label cells (which sit in column 2: "Round", "Date", "Venue", "Opponent")
+  const roundRowIdx    = findRowByLabel(rows, 'round');
+  const dateRowIdx     = findRowByLabel(rows, 'date');
+  const venueRowIdx    = findRowByLabel(rows, 'venue');
+  const opponentRowIdx = findRowByLabel(rows, 'opponent');
+
+  if (dateRowIdx === -1) {
+    syncLog('No "Date" row found. Aborting.');
     return { players: 0, matches: 0 };
   }
-  syncLog(`Player name column = ${nameColumn} (${bestMatchCount} matches found)`);
+  syncLog(`Header rows — round:${roundRowIdx} date:${dateRowIdx} venue:${venueRowIdx} opponent:${opponentRowIdx}`);
 
-  // Find date columns: cells in rows above any player rows that look like dates
-  // Build date map: { columnIdx: 'YYYY-MM-DD' } using first 8 rows
-  const dateRegex = /(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})/;
-  const dateCols = {};
-  rows.slice(0, 12).forEach(row => {
-    row.forEach((cell, colIdx) => {
-      if (dateCols[colIdx]) return;
-      const m = (cell || '').trim().match(dateRegex);
-      if (m) {
-        const [_, d, mo, y] = m;
-        const yyyy = y.length === 2 ? `20${y}` : y;
-        const iso = `${yyyy}-${String(mo).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-        dateCols[colIdx] = iso;
-      }
+  const dateRow     = rows[dateRowIdx];
+  const roundRow    = roundRowIdx >= 0 ? rows[roundRowIdx] : [];
+  const venueRow    = venueRowIdx >= 0 ? rows[venueRowIdx] : [];
+  const opponentRow = opponentRowIdx >= 0 ? rows[opponentRowIdx] : [];
+
+  // Identify fixture columns: any column with a parseable date
+  const fixtureCols = [];
+  dateRow.forEach((cell, colIdx) => {
+    const date = parseSheetDate(cell);
+    if (!date) return;
+    fixtureCols.push({
+      colIdx,
+      date,
+      round: roundRow[colIdx] || '',
+      opponent: opponentRow[colIdx] || '',
+      venue: venueRow[colIdx] || '',
     });
   });
-  syncLog(`Found ${Object.keys(dateCols).length} date columns.`);
+  syncLog(`Found ${fixtureCols.length} fixtures.`);
 
-  // Map sheet ISO date -> our fixture
-  const fixtureByDate = new Map();
-  STATE.fixtures.forEach(f => fixtureByDate.set(f.date, f));
+  if (!fixtureCols.length) return { players: 0, matches: 0 };
 
-  let playersUpdated = 0;
-  const matchIdsTouched = new Set();
-  rows.forEach(row => {
-    const name = (row[nameColumn] || '').toLowerCase().trim();
-    const player = nameLookup.get(name);
-    if (!player) return;
-    let touchedAny = false;
-    Object.entries(dateCols).forEach(([colIdx, iso]) => {
-      const fixture = fixtureByDate.get(iso);
-      if (!fixture) return;
-      const code = normaliseAvailCell(row[colIdx]);
-      if (!code) return;
-      setAvailability(fixture.id, player.id, code);
-      matchIdsTouched.add(fixture.id);
-      touchedAny = true;
-    });
-    if (touchedAny) playersUpdated++;
+  // Player rows: column 0 numeric, column 1 is GK/DEF/MID/FWD
+  const playerRows = rows.filter(row => {
+    const num = String(row[0] || '').trim();
+    const pos = (row[1] || '').toUpperCase().trim();
+    return /^\d+$/.test(num) && ['GK','DEF','MID','FWD'].includes(pos);
   });
+  syncLog(`Found ${playerRows.length} player rows.`);
+
+  // Rebuild squad — preserve IDs by name where possible
+  const oldByName = new Map(STATE.squad.map(p => [p.name.toLowerCase().trim(), p]));
+  const newSquad = playerRows.map((row, idx) => {
+    const rawName = (row[2] || '').replace(/\s*\(GK\)\s*$/i, '').trim() || `Player ${idx+1}`;
+    const role = normaliseRole(row[1]);
+    const old = oldByName.get(rawName.toLowerCase());
+    return {
+      id: old?.id || `${slugify(rawName)}-${idx + 1}`,
+      name: rawName,
+      role,
+      colors: ROLE_COLORS[role] || ROLE_COLORS.OTHER,
+    };
+  });
+
+  // Rebuild fixtures — preserve IDs by date so runtimes (minutes, subs) carry over
+  const oldByDate = new Map(STATE.fixtures.map(f => [f.date, f]));
+  const newFixtures = fixtureCols.map((fc, i) => {
+    const old = oldByDate.get(fc.date);
+    return {
+      id: old?.id || `m-${fc.date}-${i + 1}`,
+      date: fc.date,
+      label: buildFixtureLabel(fc.round, fc.opponent, fc.venue),
+    };
+  });
+
+  // Build availability per fixture × player
+  const newAvailability = {};
+  newFixtures.forEach(f => { newAvailability[f.id] = {}; });
+  playerRows.forEach((row, idx) => {
+    const player = newSquad[idx];
+    fixtureCols.forEach((fc, fIdx) => {
+      const code = normaliseAvailCell(row[fc.colIdx]);
+      newAvailability[newFixtures[fIdx].id][player.id] = code;
+    });
+  });
+
+  // Commit
+  STATE.squad = newSquad;
+  STATE.fixtures = newFixtures;
+  STATE.availability = newAvailability;
+
+  // Drop runtimes for fixtures that no longer exist
+  const validIds = new Set(newFixtures.map(f => f.id));
+  Object.keys(STATE.runtimes).forEach(id => {
+    if (!validIds.has(id)) delete STATE.runtimes[id];
+  });
+
+  // Update selected match if it's gone
+  if (!STATE.fixtures.find(f => f.id === STATE.ui.matchId)) {
+    STATE.ui.matchId = pickRelevantFixture()?.id || newFixtures[0]?.id || null;
+  }
 
   syncRuntimeAvailability();
-  return { players: playersUpdated, matches: matchIdsTouched.size };
+  return { players: newSquad.length, matches: newFixtures.length };
 }
 
 // =========================================================

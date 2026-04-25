@@ -245,6 +245,9 @@
           <p class="muted">The Google Sheet must be shared as <em>Anyone with the link can view</em>. Sync pulls availability where a player row matches by name.</p>
           <label class="control-label">Sheet ID</label>
           <input type="text" id="sheetIdInput" class="input" placeholder="1icq6EY1_dcMObs..." />
+          <label class="control-label">Range (default A1:AI30)</label>
+          <input type="text" id="sheetRangeInput" class="input" placeholder="A1:AI30" />
+          <p class="hint">Sync replaces fixtures, squad, and availability with what's in the sheet. Match minutes already played are preserved by date.</p>
           <div class="drawer-actions">
             <button class="btn primary" id="syncNowBtn">Sync now</button>
             <button class="btn ghost" id="forgetSheetBtn">Forget</button>
