@@ -333,6 +333,105 @@ function availablePlayersFor(matchId) {
 // =========================================================
 // Formation engine
 // =========================================================
+
+// Reshape the current XI to the given formation, preserving each player's
+// accumulated minutes. Existing pitch players are reassigned to the new
+// formation slots by role; missing slots are filled from bench by role.
+// Used by formation buttons (live reshape) and post-sync top-up.
+function applyFormation(matchId, formationKey) {
+  const formation = FORMATIONS[formationKey];
+  if (!formation) return;
+  const rt = getRuntime(matchId);
+  if (!rt.history) rt.history = {};
+
+  // Flush any in-flight on-pitch minutes into played so reshape doesn't lose them
+  if (rt.timer.running) {
+    const now = Date.now();
+    rt.onPitch.forEach(p => {
+      if (p.onSince != null) { p.played += (now - p.onSince) / 1000; p.onSince = now; }
+    });
+  }
+
+  const existing = rt.onPitch.map(p => ({ ...p }));
+  const benchIds = [...rt.bench];
+  const claimed = new Set();
+  const newOnPitch = [];
+
+  const playerRole = (id) => findPlayer(id)?.role;
+  const restoreMinutes = (id) => {
+    const m = rt.history[id] || 0;
+    if (rt.history[id] != null) delete rt.history[id];
+    return m;
+  };
+
+  // Pass 1: prefer existing players matching slot role
+  formation.positions.forEach(pos => {
+    let chosen = null;
+    const ex = existing.find(p => !claimed.has(p.id) && playerRole(p.id) === pos.role);
+    if (ex) chosen = ex;
+    else {
+      const benchId = benchIds.find(id => !claimed.has(id) && playerRole(id) === pos.role);
+      if (benchId) chosen = { id: benchId, played: restoreMinutes(benchId), onSince: null };
+    }
+    if (!chosen) return;
+    claimed.add(chosen.id);
+    newOnPitch.push({
+      id: chosen.id,
+      posKey: pos.key,
+      x: pos.x, y: pos.y,
+      played: chosen.played || 0,
+      onSince: chosen.onSince || null,
+    });
+  });
+
+  // Pass 2: fill any unfilled slot with anyone remaining (skip GK if no GK)
+  formation.positions.forEach(pos => {
+    if (newOnPitch.find(p => p.posKey === pos.key)) return;
+    let chosen = existing.find(p => !claimed.has(p.id));
+    if (!chosen) {
+      const benchId = benchIds.find(id => !claimed.has(id));
+      if (benchId) chosen = { id: benchId, played: restoreMinutes(benchId), onSince: null };
+    }
+    if (!chosen) return;
+    if (pos.role === 'GK' && playerRole(chosen.id) !== 'GK') return; // don't put outfielder in goal
+    claimed.add(chosen.id);
+    newOnPitch.push({
+      id: chosen.id,
+      posKey: pos.key,
+      x: pos.x, y: pos.y,
+      played: chosen.played || 0,
+      onSince: chosen.onSince || null,
+    });
+  });
+
+  // Existing players who didn't get a slot: their minutes survive in history
+  existing.forEach(p => {
+    if (!claimed.has(p.id)) rt.history[p.id] = p.played || 0;
+  });
+
+  const onPitchIds = new Set(newOnPitch.map(p => p.id));
+  const availIds = availablePlayersFor(matchId).map(p => p.id);
+  rt.onPitch = newOnPitch;
+  rt.bench = availIds.filter(id => !onPitchIds.has(id));
+  rt.selectedFieldId = null;
+  STATE.ui.formationKey = formationKey;
+}
+
+// Make sure the pitch has 11 players. If runtime is fresh, auto-populate.
+// If partially populated (e.g. after sync removed unavailable players), top up via applyFormation.
+function ensureXI(matchId) {
+  const formationKey = STATE.ui.formationKey;
+  const formation = FORMATIONS[formationKey];
+  if (!formation || !matchId) return;
+  const rt = getRuntime(matchId);
+  const fullSize = formation.positions.length;
+  if (rt.onPitch.length === 0 && rt.bench.length === 0) {
+    autoPopulate(matchId, formationKey);
+  } else if (rt.onPitch.length < fullSize) {
+    applyFormation(matchId, formationKey);
+  }
+}
+
 function autoPopulate(matchId, formationKey) {
   const formation = FORMATIONS[formationKey];
   if (!formation) return;
@@ -439,16 +538,16 @@ function performSub(offId, onId) {
   }
 
   // Replace in onPitch
+  if (!rt.history) rt.history = {};
+  const restored = rt.history[onId] || 0;
+  if (rt.history[onId] != null) delete rt.history[onId];
   const newOn = {
     id: onId,
     posKey: off.posKey,
     x: off.x, y: off.y,
-    played: getMinutesEntry(onId)?.played || 0, // reuse if cycling back
+    played: restored,
     onSince: rt.timer.running ? now : null,
   };
-  // Remove any pre-existing minutes record for `onId` from history? We just store live played here.
-  // Look up if this player has prior minutes from earlier sub cycles in rt.history
-  if (rt.history && rt.history[onId]) newOn.played = rt.history[onId];
 
   rt.onPitch = rt.onPitch.map(p => p.id === offId ? newOn : p);
   rt.bench = rt.bench.filter(id => id !== onId).concat(offId);
@@ -1142,15 +1241,22 @@ function buildAvailSegment(matchId, playerId, code) {
 function syncRuntimeAvailability() {
   const rt = currentRuntime();
   if (!rt) return;
-  const availSet = new Set(availablePlayersFor(STATE.ui.matchId).map(p => p.id));
+  const matchId = STATE.ui.matchId;
+  if (!matchId) return;
+  const availSet = new Set(availablePlayersFor(matchId).map(p => p.id));
   // Remove non-available from pitch and bench
   rt.onPitch = rt.onPitch.filter(p => availSet.has(p.id));
   rt.bench = rt.bench.filter(id => availSet.has(id));
   // Add newly-available not present anywhere
   const placed = new Set([...rt.onPitch.map(p => p.id), ...rt.bench]);
-  availablePlayersFor(STATE.ui.matchId).forEach(p => {
+  availablePlayersFor(matchId).forEach(p => {
     if (!placed.has(p.id)) rt.bench.push(p.id);
   });
+  // If XI is not full, top up using current formation while preserving minutes
+  const formationSlots = FORMATIONS[STATE.ui.formationKey]?.positions.length || 11;
+  if (rt.onPitch.length < formationSlots && availSet.size >= formationSlots) {
+    applyFormation(matchId, STATE.ui.formationKey);
+  }
 }
 
 // =========================================================
@@ -1424,15 +1530,18 @@ function init() {
 
   $('#matchSelect').addEventListener('change', (e) => {
     STATE.ui.matchId = e.target.value;
+    ensureXI(STATE.ui.matchId);
     save();
     render();
   });
   $$('.formation-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       const key = btn.dataset.formation;
-      STATE.ui.formationKey = key;
+      if (!STATE.ui.matchId) { STATE.ui.formationKey = key; save(); render(); return; }
+      applyFormation(STATE.ui.matchId, key);
       save();
       render();
+      toast(FORMATIONS[key].name);
     });
   });
   $('#autoPopulateBtn').addEventListener('click', () => {
@@ -1444,7 +1553,6 @@ function init() {
   $('#clearBoardBtn').addEventListener('click', () => {
     const rt = currentRuntime();
     if (!rt) return;
-    if (!confirm('Clear all players from the pitch?')) return;
     pauseTimerInternal(rt);
     rt.onPitch = [];
     rt.bench = availablePlayersFor(STATE.ui.matchId).map(p => p.id);
@@ -1452,6 +1560,7 @@ function init() {
     rt.selectedFieldId = null;
     save();
     render();
+    toast('Pitch cleared');
   });
 
   $('#timerToggleBtn').addEventListener('click', toggleTimer);
@@ -1462,8 +1571,9 @@ function init() {
     const idx = keys.indexOf(STATE.ui.formationKey);
     const next = keys[(idx + 1) % keys.length];
     if (!STATE.ui.matchId) return;
-    if (currentRuntime()?.onPitch.length && !confirm(`Replace current XI with ${FORMATIONS[next].name}?`)) return;
-    autoPopulate(STATE.ui.matchId, next);
+    applyFormation(STATE.ui.matchId, next);
+    save();
+    render();
     toast(FORMATIONS[next].name);
   });
   $('#fullscreenBtn').addEventListener('click', openFullscreen);
