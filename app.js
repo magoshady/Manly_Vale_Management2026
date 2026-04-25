@@ -284,7 +284,29 @@ function loadDefaults() {
     STATE.availability[f.id] = {};
     STATE.squad.forEach(p => { STATE.availability[f.id][p.id] = 'Y'; });
   });
-  STATE.ui.matchId = STATE.fixtures[0]?.id || null;
+  STATE.ui.matchId = pickRelevantFixture()?.id || STATE.fixtures[0]?.id || null;
+}
+
+// Pick today's match if there is one, otherwise the next upcoming, otherwise the most recent past.
+function pickRelevantFixture() {
+  if (!STATE.fixtures.length) return null;
+  const today = new Date(); today.setHours(0,0,0,0);
+  const todayMs = today.getTime();
+  let exact = null;
+  let upcoming = null;
+  let past = null;
+  STATE.fixtures.forEach(f => {
+    const d = new Date(f.date); if (isNaN(d.getTime())) return;
+    d.setHours(0,0,0,0);
+    const ms = d.getTime();
+    if (ms === todayMs) exact = f;
+    else if (ms > todayMs) {
+      if (!upcoming || ms < new Date(upcoming.date).getTime()) upcoming = f;
+    } else {
+      if (!past || ms > new Date(past.date).getTime()) past = f;
+    }
+  });
+  return exact || upcoming || past;
 }
 
 function getAvailability(matchId, playerId) {
@@ -576,11 +598,23 @@ function render() {
 function renderMatchSelect() {
   const sel = $('#matchSelect');
   sel.innerHTML = '';
+  const relevant = pickRelevantFixture();
+  const today = new Date(); today.setHours(0,0,0,0);
   STATE.fixtures.forEach(f => {
-    const opt = el('option', { value: f.id }, `${formatDateShort(f.date)} — ${f.label}`);
+    const d = new Date(f.date); d.setHours(0,0,0,0);
+    let tag = '';
+    if (!isNaN(d.getTime())) {
+      if (d.getTime() === today.getTime()) tag = ' · TODAY';
+      else if (relevant && f.id === relevant.id && d.getTime() > today.getTime()) tag = ' · NEXT';
+    }
+    const opt = el('option', { value: f.id }, `${formatDateShort(f.date)} — ${f.label}${tag}`);
     if (f.id === STATE.ui.matchId) opt.selected = true;
     sel.appendChild(opt);
   });
+  // Brand subtitle: show the loaded match clearly
+  const sub = $('#brandSubtitle');
+  const m = currentMatch();
+  if (sub && m) sub.textContent = `${formatDateShort(m.date)} — ${m.label}`;
   // Counts
   const available = availablePlayersFor(STATE.ui.matchId);
   const rt = currentRuntime();
@@ -1266,6 +1300,18 @@ function init() {
     save();
   }
   document.documentElement.setAttribute('data-theme', STATE.ui.theme);
+
+  // On every load, prefer today's match (or next upcoming) over a stale saved selection.
+  const todayFixture = pickRelevantFixture();
+  const today = new Date(); today.setHours(0,0,0,0);
+  const savedDate = STATE.ui.matchId
+    ? new Date((STATE.fixtures.find(f => f.id === STATE.ui.matchId) || {}).date || 0)
+    : null;
+  if (savedDate) savedDate.setHours(0,0,0,0);
+  const savedIsToday = savedDate && savedDate.getTime() === today.getTime();
+  if (todayFixture && !savedIsToday) {
+    STATE.ui.matchId = todayFixture.id;
+  }
 
   // First-load: if the current match has no runtime XI yet, auto-populate so the pitch isn't empty.
   if (STATE.ui.matchId) {
