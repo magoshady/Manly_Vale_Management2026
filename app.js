@@ -620,6 +620,7 @@ function render() {
   renderSetPieces();
   renderTimer();
   renderMinutes();
+  renderFullscreen();
 }
 
 function renderMatchSelect() {
@@ -798,6 +799,7 @@ function renderSetPieces() {
     select.addEventListener('change', () => {
       rt.setPieces[sp.key] = select.value || null;
       save();
+      renderFullscreen();
     });
     list.appendChild(el('div', { class: 'setpiece-row' },
       el('span', { class: 'setpiece-icon' }, sp.short),
@@ -812,19 +814,29 @@ function renderTimer() {
   const display = $('#timerDisplay');
   const bar = $('#timerBar');
   const toggle = $('#timerToggleBtn');
+  const fsClock = $('#fsClock');
+  const fsBtn = $('#fsTimerBtn');
   if (!rt) {
     display.textContent = '00:00';
     bar.style.width = '0%';
     toggle.textContent = 'Start';
+    if (fsClock) fsClock.textContent = '00:00';
+    if (fsBtn) fsBtn.textContent = '▶';
     return;
   }
   const sec = liveTimerSec(rt);
   display.textContent = fmtClock(sec);
+  if (fsClock) fsClock.textContent = fmtClock(sec);
   bar.style.width = `${Math.min(100, (sec / HALF_SECONDS) * 100)}%`;
   display.classList.toggle('warn', sec >= HALF_SECONDS - 5 * 60 && sec < HALF_SECONDS);
   display.classList.toggle('over', sec >= HALF_SECONDS);
+  if (fsClock) {
+    fsClock.classList.toggle('warn', sec >= HALF_SECONDS - 5 * 60 && sec < HALF_SECONDS);
+    fsClock.classList.toggle('over', sec >= HALF_SECONDS);
+  }
   toggle.textContent = rt.timer.running ? 'Pause' : (rt.timer.accumulatedMs > 0 ? 'Resume' : 'Start');
   toggle.classList.toggle('primary', !rt.timer.running);
+  if (fsBtn) fsBtn.textContent = rt.timer.running ? '⏸' : '▶';
 }
 
 function renderMinutes() {
@@ -1383,6 +1395,21 @@ function init() {
 
   $('#timerToggleBtn').addEventListener('click', toggleTimer);
   $('#timerResetBtn').addEventListener('click', resetTimer);
+  $('#fsTimerBtn').addEventListener('click', toggleTimer);
+  $('#fsFormationBtn').addEventListener('click', () => {
+    const keys = Object.keys(FORMATIONS);
+    const idx = keys.indexOf(STATE.ui.formationKey);
+    const next = keys[(idx + 1) % keys.length];
+    if (!STATE.ui.matchId) return;
+    if (currentRuntime()?.onPitch.length && !confirm(`Replace current XI with ${FORMATIONS[next].name}?`)) return;
+    autoPopulate(STATE.ui.matchId, next);
+    toast(FORMATIONS[next].name);
+  });
+  $('#fullscreenBtn').addEventListener('click', openFullscreen);
+  $('#fsExitBtn').addEventListener('click', closeFullscreen);
+  $('#fsNextBtn').addEventListener('click', cycleSetPiece);
+  $('#fsSubBtn').addEventListener('click', openSubDrawer);
+  $('#fsSubDrawerClose').addEventListener('click', closeSubDrawer);
 
   $('#themeBtn').addEventListener('click', () => {
     STATE.ui.theme = STATE.ui.theme === 'dark' ? 'light' : 'dark';
@@ -1438,8 +1465,11 @@ function init() {
 
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
-      if (!$('#setupDrawer').hidden) closeSetup();
+      if (!$('#fullscreen').hidden) closeFullscreen();
+      else if (!$('#setupDrawer').hidden) closeSetup();
+      else if (!$('#fsSubDrawer').hidden) closeSubDrawer();
     }
+    if (e.key === 'ArrowRight' && !$('#fullscreen').hidden) cycleSetPiece();
   });
 
   render();
