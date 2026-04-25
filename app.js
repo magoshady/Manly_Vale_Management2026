@@ -186,26 +186,31 @@ function getRuntime(matchId) {
 // =========================================================
 function save() {
   try {
-    // Pause running timers before saving so wall-clock drift across reloads doesn't double-count
-    Object.values(STATE.runtimes).forEach(rt => {
-      if (rt.timer && rt.timer.running) {
-        rt.timer.accumulatedMs = Date.now() - rt.timer.runStartedAt;
-        rt.timer.running = false;
-        rt.timer.runStartedAt = null;
-        rt.onPitch.forEach(p => {
+    // Snapshot a *paused* version for storage so a future reload can't double-count wall-clock drift,
+    // but DO NOT mutate the live STATE — running timers must keep ticking.
+    const now = Date.now();
+    const snapshotRuntimes = {};
+    Object.entries(STATE.runtimes).forEach(([id, rt]) => {
+      const cloned = JSON.parse(JSON.stringify(rt));
+      if (cloned.timer && cloned.timer.running) {
+        cloned.timer.accumulatedMs = now - cloned.timer.runStartedAt;
+        cloned.timer.running = false;
+        cloned.timer.runStartedAt = null;
+        cloned.onPitch.forEach(p => {
           if (p.onSince != null) {
-            p.played += (Date.now() - p.onSince) / 1000;
+            p.played += (now - p.onSince) / 1000;
             p.onSince = null;
           }
         });
       }
+      snapshotRuntimes[id] = cloned;
     });
     localStorage.setItem(STORAGE_KEY, JSON.stringify({
       squad: STATE.squad,
       fixtures: STATE.fixtures,
       availability: STATE.availability,
       ui: STATE.ui,
-      runtimes: STATE.runtimes,
+      runtimes: snapshotRuntimes,
     }));
   } catch (e) {
     console.error('Save failed', e);
@@ -663,6 +668,8 @@ function renderFormationButtons() {
   if (f) {
     $('#formationTitle').textContent = `${currentMatch()?.label || 'No match'} · ${f.name}`;
     $('#formationSubtitle').textContent = f.subtitle;
+    const fsBtn = $('#fsFormationBtn');
+    if (fsBtn) fsBtn.textContent = f.name.replace(/-/g, '').replace(' Diamond', '◆');
   }
 }
 
@@ -1389,6 +1396,15 @@ function init() {
   $('#timerToggleBtn').addEventListener('click', toggleTimer);
   $('#timerResetBtn').addEventListener('click', resetTimer);
   $('#fsTimerBtn').addEventListener('click', toggleTimer);
+  $('#fsFormationBtn').addEventListener('click', () => {
+    const keys = Object.keys(FORMATIONS);
+    const idx = keys.indexOf(STATE.ui.formationKey);
+    const next = keys[(idx + 1) % keys.length];
+    if (!STATE.ui.matchId) return;
+    if (currentRuntime()?.onPitch.length && !confirm(`Replace current XI with ${FORMATIONS[next].name}?`)) return;
+    autoPopulate(STATE.ui.matchId, next);
+    toast(FORMATIONS[next].name);
+  });
 
   $('#themeBtn').addEventListener('click', () => {
     STATE.ui.theme = STATE.ui.theme === 'dark' ? 'light' : 'dark';
