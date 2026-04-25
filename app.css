@@ -452,10 +452,13 @@ textarea { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-siz
   border-radius: 0;
 }
 .fs .marker {
-  width: clamp(80px, 8vw, 130px);
-  font-size: clamp(0.78rem, 1.4vw, 1rem);
-  border-width: 4px;
+  width: clamp(48px, 6.2vh, 78px);
+  font-size: clamp(0.6rem, 1vh, 0.78rem);
+  border-width: 3px;
+  padding: 0.25rem;
 }
+.fs .marker .name { font-size: 0.95em; }
+.fs .marker .pos { font-size: 0.62em; margin-top: 0.05rem; }
 
 .fs-hud-top {
   position: absolute;
@@ -471,6 +474,8 @@ textarea { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-siz
   border: 1px solid rgba(255,255,255,0.1);
   z-index: 20;
 }
+#fsExitBtn { background: rgba(255,255,255,0.16); border-color: rgba(255,255,255,0.25); }
+#fsExitBtn:hover { background: var(--color-rose); }
 .fs-clock {
   color: white;
   font-variant-numeric: tabular-nums;

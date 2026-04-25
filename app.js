@@ -395,11 +395,34 @@ function selectFieldPlayer(playerId) {
   render();
 }
 
+function swapOnPitch(idA, idB) {
+  const rt = currentRuntime();
+  if (!rt || idA === idB) return;
+  const a = rt.onPitch.find(p => p.id === idA);
+  const b = rt.onPitch.find(p => p.id === idB);
+  if (!a || !b) return;
+  const tmpId = a.id;
+  a.id = b.id;
+  b.id = tmpId;
+  // played/onSince follow the player, so swap those too
+  const tmpPlayed = a.played, tmpOn = a.onSince;
+  a.played = b.played; a.onSince = b.onSince;
+  b.played = tmpPlayed; b.onSince = tmpOn;
+  rt.selectedFieldId = null;
+  save();
+  render();
+}
+
 function performSub(offId, onId) {
   const rt = currentRuntime();
   if (!rt) return;
   const off = rt.onPitch.find(p => p.id === offId);
   if (!off) return;
+  // Pitch-to-pitch: swap positions of two on-pitch players
+  if (rt.onPitch.find(p => p.id === onId)) {
+    swapOnPitch(offId, onId);
+    return;
+  }
   if (!rt.bench.includes(onId)) return;
 
   const now = Date.now();
@@ -667,11 +690,16 @@ function createMarker(player, slot, opts = {}) {
   inner.appendChild(el('span', { class: 'name' }, shortName(player.name)));
   inner.appendChild(el('span', { class: 'pos' }, slot.posKey || player.role));
   node.appendChild(inner);
-  // Substitution selection: tap to select for swap
+  // Substitution selection / pitch-to-pitch swap
   node.addEventListener('click', (e) => {
     e.preventDefault();
     if (markerJustDragged) { markerJustDragged = false; return; }
-    selectFieldPlayer(player.id);
+    const rt = currentRuntime();
+    if (rt && rt.selectedFieldId && rt.selectedFieldId !== player.id) {
+      swapOnPitch(rt.selectedFieldId, player.id);
+    } else {
+      selectFieldPlayer(player.id);
+    }
   });
   // Drag
   attachDrag(node, player.id);
@@ -902,7 +930,12 @@ function createFsMarker(player, slot, highlighted) {
   node.addEventListener('click', (e) => {
     e.preventDefault();
     if (markerJustDragged) { markerJustDragged = false; return; }
-    selectFieldPlayer(player.id);
+    const r = currentRuntime();
+    if (r && r.selectedFieldId && r.selectedFieldId !== player.id) {
+      swapOnPitch(r.selectedFieldId, player.id);
+    } else {
+      selectFieldPlayer(player.id);
+    }
   });
   attachDrag(node, player.id);
   return node;
