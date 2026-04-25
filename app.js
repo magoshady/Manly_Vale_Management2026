@@ -1412,7 +1412,6 @@ function init() {
     save();
   });
 
-  $('#fullscreenBtn').addEventListener('click', openFullscreen);
   $('#fsExitBtn').addEventListener('click', closeFullscreen);
   $('#fsNextBtn').addEventListener('click', cycleSetPiece);
   $('#fsSubBtn').addEventListener('click', openSubDrawer);
