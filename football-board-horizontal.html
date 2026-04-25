@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Football Board Horizontal</title>
+  <link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700&display=swap" rel="stylesheet">
+  <style>
+    :root, [data-theme="light"] {
+      --text-xs: clamp(0.75rem, 0.7rem + 0.25vw, 0.875rem);
+      --text-sm: clamp(0.875rem, 0.8rem + 0.35vw, 1rem);
+      --text-base: clamp(1rem, 0.95rem + 0.25vw, 1.125rem);
+      --text-lg: clamp(1.125rem, 1rem + 0.75vw, 1.5rem);
+      --text-xl: clamp(1.5rem, 1.2rem + 1.25vw, 2.25rem);
+      --space-1: 0.25rem; --space-2: 0.5rem; --space-3: 0.75rem; --space-4: 1rem; --space-5: 1.25rem; --space-6: 1.5rem; --space-8: 2rem;
+      --color-bg: #f7f6f2; --color-surface: #f9f8f5; --color-surface-2: #fbfbf9; --color-surface-offset: #f3f0ec; --color-border: #d4d1ca;
+      --color-text: #28251d; --color-text-muted: #7a7974; --color-text-inverse: #f9f8f4; --color-primary: #01696f; --color-blue: #006494;
+      --radius-md: 0.5rem; --radius-lg: 0.75rem; --radius-xl: 1rem; --radius-full: 9999px;
+      --shadow-sm: 0 1px 2px rgba(40,37,29,.06); --shadow-md: 0 12px 32px rgba(40,37,29,.12);
+      --transition: 180ms cubic-bezier(0.16,1,0.3,1); --font-body: 'Satoshi', Arial, sans-serif;
+    }
+    [data-theme="dark"] {
+      --color-bg: #171614; --color-surface: #1c1b19; --color-surface-2: #201f1d; --color-surface-offset: #242220; --color-border: #393836;
+      --color-text: #cdccca; --color-text-muted: #97958f; --color-text-inverse: #171614; --color-primary: #4f98a3; --color-blue: #5591c7;
+      --shadow-sm: 0 1px 2px rgba(0,0,0,.2); --shadow-md: 0 12px 32px rgba(0,0,0,.35);
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body { min-height: 100vh; font-family: var(--font-body); font-size: var(--text-base); line-height: 1.5; background: var(--color-bg); color: var(--color-text); }
+    button, textarea, input { font: inherit; }
+    button { cursor: pointer; border: none; }
+    .app { max-width: 1460px; margin: 0 auto; padding: var(--space-4); display: grid; gap: var(--space-4); }
+    .topbar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); }
+    .brand { display: flex; align-items: center; gap: var(--space-3); }
+    .brand-mark { width: 2.8rem; height: 2.8rem; border-radius: 0.9rem; display: grid; place-items: center; color: white; background: linear-gradient(135deg, var(--color-primary), var(--color-blue)); box-shadow: var(--shadow-sm); }
+    .brand h1 { margin: 0; font-size: var(--text-xl); }
+    .brand p { margin: 0.15rem 0 0; color: var(--color-text-muted); font-size: var(--text-sm); }
+    .theme-toggle { min-width: 44px; min-height: 44px; border-radius: var(--radius-full); background: var(--color-surface); color: var(--color-text); border: 1px solid var(--color-border); }
+    .layout { display: grid; grid-template-columns: minmax(330px, 420px) minmax(0, 1fr); gap: var(--space-4); align-items: start; }
+    .panel { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-xl); box-shadow: var(--shadow-sm); overflow: hidden; }
+    .panel-head { padding: var(--space-4); border-bottom: 1px solid var(--color-border); background: var(--color-surface-2); }
+    .panel-head h2 { margin: 0; font-size: var(--text-lg); }
+    .panel-head p { margin: 0.35rem 0 0; color: var(--color-text-muted); font-size: var(--text-sm); }
+    .panel-body { padding: var(--space-4); display: grid; gap: var(--space-4); }
+    .btn-row { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+    .btn { min-height: 44px; padding: 0.72rem 0.95rem; border-radius: var(--radius-md); background: var(--color-primary); color: var(--color-text-inverse); transition: transform var(--transition), background var(--transition); }
+    .btn:hover { transform: translateY(-1px); }
+    .btn.secondary { background: var(--color-surface-2); color: var(--color-text); border: 1px solid var(--color-border); }
+    textarea { width: 100%; min-height: 220px; resize: vertical; border-radius: var(--radius-lg); border: 1px solid var(--color-border); background: var(--color-surface-2); color: var(--color-text); padding: var(--space-4); }
+    .availability-list { display: grid; gap: var(--space-2); max-height: 420px; overflow: auto; padding-right: 0.2rem; }
+    .player-row { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; gap: var(--space-3); padding: 0.85rem; border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-surface-2); }
+    .player-row strong { display: block; font-size: var(--text-sm); }
+    .player-row span { color: var(--color-text-muted); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.08em; }
+    .radio-group { display: flex; gap: var(--space-3); flex-wrap: wrap; }
+    .radio-group label { display: inline-flex; align-items: center; gap: 0.35rem; color: var(--color-text-muted); font-size: var(--text-xs); }
+    .radio-group input { accent-color: var(--color-primary); }
+    .summary { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: var(--space-2); }
+    .summary-card { background: var(--color-surface-2); border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: 0.9rem; }
+    .summary-card strong { display: block; font-size: var(--text-lg); line-height: 1; }
+    .summary-card span { color: var(--color-text-muted); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.08em; }
+    .field-wrap { display: grid; gap: var(--space-4); }
+    .field-top { display: flex; justify-content: space-between; align-items: center; gap: var(--space-4); flex-wrap: wrap; }
+    .field-top h2 { margin: 0; font-size: var(--text-xl); }
+    .field-top p { margin: 0.35rem 0 0; color: var(--color-text-muted); font-size: var(--text-sm); }
+    .status { display: inline-flex; align-items: center; min-height: 44px; padding: 0.6rem 0.95rem; border-radius: var(--radius-full); border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text-muted); font-size: var(--text-sm); }
+    .pitch-card { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: calc(var(--radius-xl) + 0.2rem); box-shadow: var(--shadow-md); padding: var(--space-4); }
+    .pitch { position: relative; width: 100%; aspect-ratio: 10 / 16; max-height: 980px; border-radius: calc(var(--radius-xl) + 0.1rem); overflow: hidden; background: linear-gradient(to bottom, #2b7c44, #309052); }
+    .pitch::before { content: ''; position: absolute; inset: 14px; border: 3px solid rgba(255,255,255,0.94); border-radius: inherit; pointer-events: none; }
+    .pitch-lines { position: absolute; inset: 14px; width: calc(100% - 28px); height: calc(100% - 28px); object-fit: fill; pointer-events: none; }
+    .marker { position: absolute; width: 78px; height: 78px; transform: translate(-50%, -50%); border-radius: 50%; display: flex; align-items: center; justify-content: center; text-align: center; padding: 0.35rem; color: white; font-weight: 700; font-size: 0.76rem; line-height: 1.02; border: 3px solid rgba(255,255,255,0.92); box-shadow: 0 10px 24px rgba(0,0,0,0.2); touch-action: none; user-select: none; cursor: grab; background: linear-gradient(145deg, var(--marker-a), var(--marker-b)); }
+    .marker.dragging { cursor: grabbing; z-index: 10; }
+    .marker span { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+    .marker small { display: block; margin-top: 0.18rem; font-size: 0.58rem; letter-spacing: 0.04em; opacity: 0.92; }
+    .note { color: var(--color-text-muted); font-size: var(--text-sm); }
+    @media (max-width: 1050px) {
+      .layout { grid-template-columns: 1fr; }
+      .pitch { aspect-ratio: 4 / 6; }
+    }
+    @media (max-width: 640px) {
+      .app { padding: var(--space-3); }
+      .summary { grid-template-columns: repeat(2, minmax(0,1fr)); }
+      .marker { width: 68px; height: 68px; font-size: 0.68rem; }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 2L20 7V17L12 22L4 17V7L12 2Z" stroke="currentColor" stroke-width="1.7"/>
+            <path d="M12 2V22M4 7L20 17M20 7L4 17" stroke="currentColor" stroke-width="1.35" opacity="0.92"/>
+          </svg>
+        </div>
+        <div>
+          <h1>Football tactics board</h1>
+          <p>Load your squad, mark availability, and place available players horizontally on the field.</p>
+        </div>
+      </div>
+      <button class="theme-toggle" data-theme-toggle aria-label="Toggle theme">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+      </button>
+    </header>
+
+    <section class="layout">
+      <aside class="panel">
+        <div class="panel-head">
+          <h2>Squad input</h2>
+          <p>Use one player per line in the format: Name / Position</p>
+        </div>
+        <div class="panel-body">
+          <textarea id="playerInput">Carlos Tanco / GK
+Johan Arrieta / DEF
+David Roberts / DEF
+Santi Paz / DEF
+Tom Smyth / DEF
+Benji Baxter / DEF
+Nico Gandi / DEF
+Pablo Pinero / DEF
+Javi Castillo / MID
+Christian Montivero / MID
+Mati Herrera / MID
+Michel Prezzi / MID
+Otto Thoresen / MID
+Abraham Barahona / MID
+Matt Wellstead / MID
+Alex Holder / MID
+Nicolas Matute / MID
+Manny Hastings / FWD
+Juan Pablo Munoz Valdez / FWD
+Miles Partridge / FWD
+Vincent Templon / FWD</textarea>
+          <div class="btn-row">
+            <button class="btn" id="loadSquadBtn">Load squad</button>
+            <button class="btn secondary" id="setAllAvailableBtn">All available</button>
+            <button class="btn secondary" id="setAllUnavailableBtn">All unavailable</button>
+          </div>
+          <div>
+            <h2 style="margin:0 0 .5rem; font-size: var(--text-lg);">Availability overview</h2>
+            <p class="note" style="margin:0 0 1rem;">Only available players will appear on the board when you load them.</p>
+            <div id="availabilityList" class="availability-list"></div>
+          </div>
+          <div>
+            <h2 style="margin:0 0 .75rem; font-size: var(--text-lg);">Squad summary</h2>
+            <div class="summary" id="summaryGrid"></div>
+          </div>
+        </div>
+      </aside>
+
+      <section class="field-wrap">
+        <div class="field-top">
+          <div>
+            <h2>Interactive board</h2>
+            <p>Available players are laid out horizontally and can then be dragged into position.</p>
+          </div>
+          <div class="btn-row">
+            <button class="btn" id="placeAvailableBtn">Place available players</button>
+            <button class="btn secondary" id="clearBoardBtn">Clear board</button>
+            <div class="status" id="statusText">Ready</div>
+          </div>
+        </div>
+        <div class="pitch-card">
+          <div class="pitch" id="pitch">
+            <img class="pitch-lines" src="https://upload.wikimedia.org/wikipedia/commons/8/82/Soccer_Field_Transparant.svg" alt="Soccer field markings" loading="lazy" width="452" height="684">
+          </div>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <script>
+    const playerInput = document.getElementById('playerInput');
+    const loadSquadBtn = document.getElementById('loadSquadBtn');
+    const setAllAvailableBtn = document.getElementById('setAllAvailableBtn');
+    const setAllUnavailableBtn = document.getElementById('setAllUnavailableBtn');
+    const placeAvailableBtn = document.getElementById('placeAvailableBtn');
+    const clearBoardBtn = document.getElementById('clearBoardBtn');
+    const availabilityList = document.getElementById('availabilityList');
+    const summaryGrid = document.getElementById('summaryGrid');
+    const pitch = document.getElementById('pitch');
+    const statusText = document.getElementById('statusText');
+    const themeToggle = document.querySelector('[data-theme-toggle]');
+    const root = document.documentElement;
+
+    const roleColors = {
+      GK: ['#01696f', '#0c4e54'],
+      DEF: ['#006494', '#0b5177'],
+      MID: ['#437a22', '#2e5c10'],
+      FWD: ['#964219', '#713417'],
+      OTHER: ['#7a39bb', '#5f2699']
+    };
+
+    let squad = [];
+    let boardPlayers = [];
+    let dragState = null;
+    let theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    root.setAttribute('data-theme', theme);
+    setThemeIcon();
+
+    function setThemeIcon() {
+      themeToggle.innerHTML = theme === 'dark'
+        ? '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"></circle><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"></path></svg>'
+        : '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>';
+    }
+
+    themeToggle.addEventListener('click', () => {
+      theme = theme === 'dark' ? 'light' : 'dark';
+      root.setAttribute('data-theme', theme);
+      setThemeIcon();
+    });
+
+    function normaliseRole(role) {
+      const value = (role || '').trim().toUpperCase();
+      if (['GK','GOALKEEPER'].includes(value)) return 'GK';
+      if (['DEF','DEFENDER'].includes(value)) return 'DEF';
+      if (['MID','MIDFIELDER'].includes(value)) return 'MID';
+      if (['FWD','FW','ST','STRIKER','FORWARD'].includes(value)) return 'FWD';
+      return 'OTHER';
+    }
+
+    function parseSquad(text) {
+      return text.split(/\n/).map(line => line.trim()).filter(Boolean).map((line, index) => {
+        const parts = line.split('/');
+        const name = (parts[0] || `Player ${index + 1}`).trim();
+        const role = normaliseRole(parts[1] || 'OTHER');
+        return {
+          id: `${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${index + 1}`,
+          name,
+          role,
+          available: true,
+          colors: roleColors[role] || roleColors.OTHER
+        };
+      });
+    }
+
+    function shortenName(name) {
+      if (name.length <= 12) return name;
+      const parts = name.split(' ');
+      if (parts.length >= 2) return `${parts[0]} ${parts[1][0]}.`;
+      return name.slice(0, 11);
+    }
+
+    function renderAvailability() {
+      if (!squad.length) {
+        availabilityList.innerHTML = '<div class="player-row"><strong>No players loaded</strong><span>Add players in the text box</span></div>';
+        return;
+      }
+      availabilityList.innerHTML = squad.map((player, index) => `
+        <div class="player-row">
+          <div>
+            <strong>${player.name}</strong>
+            <span>${player.role}</span>
+          </div>
+          <div class="radio-group">
+            <label><input type="radio" name="available-${index}" value="yes" ${player.available ? 'checked' : ''}> Available</label>
+            <label><input type="radio" name="available-${index}" value="no" ${player.available ? '' : 'checked'}> Unavailable</label>
+          </div>
+        </div>
+      `).join('');
+
+      availabilityList.querySelectorAll('input[type="radio"]').forEach(input => {
+        input.addEventListener('change', e => {
+          const idx = Number(e.target.name.replace('available-', ''));
+          squad[idx].available = e.target.value === 'yes';
+          updateSummary();
+        });
+      });
+    }
+
+    function updateSummary() {
+      const counts = { total: squad.length, available: squad.filter(p => p.available).length, GK: 0, DEF: 0, MID: 0, FWD: 0 };
+      squad.forEach(player => {
+        if (counts[player.role] !== undefined) counts[player.role] += 1;
+      });
+      const items = [
+        ['Total', counts.total],
+        ['Available', counts.available],
+        ['GK', counts.GK],
+        ['DEF', counts.DEF],
+        ['MID', counts.MID],
+        ['FWD', counts.FWD]
+      ];
+      summaryGrid.innerHTML = items.map(([label, value]) => `<div class="summary-card"><strong>${value}</strong><span>${label}</span></div>`).join('');
+    }
+
+    function createMarker(player) {
+      const marker = document.createElement('button');
+      marker.className = 'marker';
+      marker.dataset.id = player.id;
+      marker.style.left = `${player.x}%`;
+      marker.style.top = `${player.y}%`;
+      marker.style.setProperty('--marker-a', player.colors[0]);
+      marker.style.setProperty('--marker-b', player.colors[1]);
+      marker.innerHTML = `<span>${shortenName(player.name)}<small>${player.role}</small></span>`;
+      marker.setAttribute('aria-label', `${player.name} ${player.role}`);
+      marker.addEventListener('pointerdown', event => startDrag(event, player.id));
+      return marker;
+    }
+
+    function renderBoard() {
+      pitch.querySelectorAll('.marker').forEach(node => node.remove());
+      boardPlayers.forEach(player => pitch.appendChild(createMarker(player)));
+      statusText.textContent = boardPlayers.length ? `${boardPlayers.length} players on the board` : 'No players on the board';
+    }
+
+    function placeAvailablePlayers() {
+      const available = squad.filter(player => player.available);
+      if (!available.length) {
+        boardPlayers = [];
+        renderBoard();
+        statusText.textContent = 'No available players selected';
+        return;
+      }
+      const leftX = 14;
+      const rightX = 86;
+      const y = 50;
+      const step = available.length > 1 ? (rightX - leftX) / (available.length - 1) : 0;
+      boardPlayers = available.map((player, index) => ({
+        ...player,
+        x: Math.max(10, Math.min(90, leftX + (step * index))),
+        y
+      }));
+      renderBoard();
+      statusText.textContent = `${available.length} available players placed horizontally`;
+    }
+
+    function pointerToPitchPercent(clientX, clientY) {
+      const rect = pitch.getBoundingClientRect();
+      return {
+        x: Math.max(8, Math.min(92, ((clientX - rect.left) / rect.width) * 100)),
+        y: Math.max(6, Math.min(94, ((clientY - rect.top) / rect.height) * 100))
+      };
+    }
+
+    function startDrag(event, playerId) {
+      const marker = event.currentTarget;
+      marker.classList.add('dragging');
+      marker.setPointerCapture(event.pointerId);
+      dragState = { playerId, marker };
+      marker.addEventListener('pointermove', onPointerMove);
+      marker.addEventListener('pointerup', onPointerUp, { once: true });
+      marker.addEventListener('pointercancel', onPointerUp, { once: true });
+    }
+
+    function onPointerMove(event) {
+      if (!dragState) return;
+      const player = boardPlayers.find(item => item.id === dragState.playerId);
+      if (!player) return;
+      const point = pointerToPitchPercent(event.clientX, event.clientY);
+      player.x = point.x;
+      player.y = point.y;
+      dragState.marker.style.left = `${point.x}%`;
+      dragState.marker.style.top = `${point.y}%`;
+    }
+
+    function onPointerUp() {
+      if (!dragState) return;
+      dragState.marker.classList.remove('dragging');
+      dragState = null;
+      renderBoard();
+    }
+
+    function loadSquad() {
+      squad = parseSquad(playerInput.value);
+      boardPlayers = [];
+      renderAvailability();
+      updateSummary();
+      renderBoard();
+      statusText.textContent = `${squad.length} players loaded`;
+    }
+
+    loadSquadBtn.addEventListener('click', loadSquad);
+    setAllAvailableBtn.addEventListener('click', () => {
+      squad = squad.map(player => ({ ...player, available: true }));
+      renderAvailability();
+      updateSummary();
+    });
+    setAllUnavailableBtn.addEventListener('click', () => {
+      squad = squad.map(player => ({ ...player, available: false }));
+      renderAvailability();
+      updateSummary();
+    });
+    placeAvailableBtn.addEventListener('click', placeAvailablePlayers);
+    clearBoardBtn.addEventListener('click', () => {
+      boardPlayers = [];
+      renderBoard();
+      statusText.textContent = 'Board cleared';
+    });
+
+    loadSquad();
+  </script>
+</body>
+</html>
