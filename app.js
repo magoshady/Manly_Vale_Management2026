@@ -282,6 +282,26 @@ function buildFixtures(rows) {
   }));
 }
 
+function startOfLocalDayMs(date = new Date()) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+}
+
+function fixtureDateMs(value) {
+  const text = String(value || '').trim();
+  const iso = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (iso) {
+    const year = Number(iso[1]);
+    const month = Number(iso[2]) - 1;
+    const day = Number(iso[3]);
+    const parsed = new Date(year, month, day);
+    if (parsed.getFullYear() !== year || parsed.getMonth() !== month || parsed.getDate() !== day) return null;
+    return parsed.getTime();
+  }
+
+  const parsed = new Date(text);
+  return isNaN(parsed.getTime()) ? null : startOfLocalDayMs(parsed);
+}
+
 function loadDefaults() {
   STATE.squad = buildSquad(DEFAULT_SQUAD);
   STATE.fixtures = buildFixtures(DEFAULT_FIXTURES);
@@ -291,29 +311,33 @@ function loadDefaults() {
     STATE.availability[f.id] = {};
     STATE.squad.forEach(p => { STATE.availability[f.id][p.id] = 'Y'; });
   });
-  STATE.ui.matchId = pickRelevantFixture()?.id || STATE.fixtures[0]?.id || null;
+  selectClosestFixtureForToday();
 }
 
 // Pick today's match if there is one, otherwise the next upcoming, otherwise the most recent past.
-function pickRelevantFixture() {
+function pickRelevantFixture(referenceDate = new Date()) {
   if (!STATE.fixtures.length) return null;
-  const today = new Date(); today.setHours(0,0,0,0);
-  const todayMs = today.getTime();
+  const todayMs = startOfLocalDayMs(referenceDate);
   let exact = null;
   let upcoming = null;
   let past = null;
   STATE.fixtures.forEach(f => {
-    const d = new Date(f.date); if (isNaN(d.getTime())) return;
-    d.setHours(0,0,0,0);
-    const ms = d.getTime();
+    const ms = fixtureDateMs(f.date);
+    if (ms == null) return;
     if (ms === todayMs) exact = f;
     else if (ms > todayMs) {
-      if (!upcoming || ms < new Date(upcoming.date).getTime()) upcoming = f;
+      if (!upcoming || ms < upcoming.ms) upcoming = { fixture: f, ms };
     } else {
-      if (!past || ms > new Date(past.date).getTime()) past = f;
+      if (!past || ms > past.ms) past = { fixture: f, ms };
     }
   });
-  return exact || upcoming || past;
+  return exact || upcoming?.fixture || past?.fixture || STATE.fixtures[0] || null;
+}
+
+function selectClosestFixtureForToday() {
+  const fixture = pickRelevantFixture();
+  STATE.ui.matchId = fixture?.id || STATE.fixtures[0]?.id || null;
+  return STATE.ui.matchId;
 }
 
 function getAvailability(matchId, playerId) {
@@ -662,18 +686,22 @@ function el(tag, attrs = {}, ...children) {
   return node;
 }
 
-function shortName(name, max = 14) {
-  if (!name) return '';
-  if (name.length <= max) return name;
-  const parts = name.split(/\s+/);
-  if (parts.length >= 2) {
-    const first = parts[0];
-    const last = parts[parts.length - 1];
-    const candidate = `${first} ${last[0]}.`;
-    if (candidate.length <= max) return candidate;
-    return `${first[0]}. ${last}`.slice(0, max);
+function initialsFromName(name) {
+  const parts = (name || '').trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return '?';
+
+  const lettersFrom = (part) => {
+    const normalized = part.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    return (normalized.match(/[A-Za-z0-9]/g) || []).join('');
+  };
+
+  if (parts.length === 1) {
+    return lettersFrom(parts[0]).slice(0, 2).toUpperCase() || '?';
   }
-  return name.slice(0, max - 1) + '…';
+
+  const first = lettersFrom(parts[0])[0] || '';
+  const last = lettersFrom(parts[parts.length - 1])[0] || '';
+  return `${first}${last}`.toUpperCase() || '?';
 }
 
 function findPlayer(id) { return STATE.squad.find(p => p.id === id); }
@@ -728,13 +756,13 @@ function renderMatchSelect() {
   const sel = $('#matchSelect');
   sel.innerHTML = '';
   const relevant = pickRelevantFixture();
-  const today = new Date(); today.setHours(0,0,0,0);
+  const todayMs = startOfLocalDayMs();
   STATE.fixtures.forEach(f => {
-    const d = new Date(f.date); d.setHours(0,0,0,0);
+    const ms = fixtureDateMs(f.date);
     let tag = '';
-    if (!isNaN(d.getTime())) {
-      if (d.getTime() === today.getTime()) tag = ' · TODAY';
-      else if (relevant && f.id === relevant.id && d.getTime() > today.getTime()) tag = ' · NEXT';
+    if (ms != null) {
+      if (ms === todayMs) tag = ' · TODAY';
+      else if (relevant && f.id === relevant.id && ms > todayMs) tag = ' · NEXT';
     }
     const opt = el('option', { value: f.id }, `${formatDateShort(f.date)} — ${f.label}${tag}`);
     if (f.id === STATE.ui.matchId) opt.selected = true;
@@ -756,8 +784,9 @@ function renderMatchSelect() {
 
 function formatDateShort(iso) {
   if (!iso) return '';
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return iso;
+  const ms = fixtureDateMs(iso);
+  if (ms == null) return iso;
+  const d = new Date(ms);
   return d.toLocaleDateString(undefined, { day: '2-digit', month: 'short' });
 }
 
@@ -795,7 +824,7 @@ function createMarker(player, slot, opts = {}) {
     title: `${player.name} (${player.role})`,
   });
   const inner = el('div', {});
-  inner.appendChild(el('span', { class: 'name' }, shortName(player.name)));
+  inner.appendChild(el('span', { class: 'name' }, initialsFromName(player.name)));
   inner.appendChild(el('span', { class: 'pos' }, slot.posKey || player.role));
   node.appendChild(inner);
   // Substitution selection / pitch-to-pitch swap
@@ -1033,7 +1062,7 @@ function createFsMarker(player, slot, highlighted) {
     dataset: { id: player.id },
     title: `${player.name} (${player.role})`,
   });
-  node.appendChild(el('span', { class: 'name' }, shortName(player.name, 18)));
+  node.appendChild(el('span', { class: 'name' }, initialsFromName(player.name)));
   node.appendChild(el('span', { class: 'pos' }, slot.posKey || player.role));
   node.addEventListener('click', (e) => {
     e.preventDefault();
@@ -1181,9 +1210,8 @@ function saveFixturesFromInput() {
       STATE.squad.forEach(p => { STATE.availability[f.id][p.id] = 'Y'; });
     }
   });
-  if (!STATE.fixtures.find(f => f.id === STATE.ui.matchId)) {
-    STATE.ui.matchId = STATE.fixtures[0]?.id || null;
-  }
+  selectClosestFixtureForToday();
+  if (STATE.ui.matchId) ensureXI(STATE.ui.matchId);
   save();
   toast('Fixtures saved');
   render();
@@ -1449,12 +1477,9 @@ function applySheetCsv(csv) {
     if (!validIds.has(id)) delete STATE.runtimes[id];
   });
 
-  // Update selected match if it's gone
-  if (!STATE.fixtures.find(f => f.id === STATE.ui.matchId)) {
-    STATE.ui.matchId = pickRelevantFixture()?.id || newFixtures[0]?.id || null;
-  }
-
+  selectClosestFixtureForToday();
   syncRuntimeAvailability();
+  if (STATE.ui.matchId) ensureXI(STATE.ui.matchId);
   return { players: newSquad.length, matches: newFixtures.length };
 }
 
@@ -1508,17 +1533,8 @@ function init() {
   }
   document.documentElement.setAttribute('data-theme', STATE.ui.theme);
 
-  // On every load, prefer today's match (or next upcoming) over a stale saved selection.
-  const todayFixture = pickRelevantFixture();
-  const today = new Date(); today.setHours(0,0,0,0);
-  const savedDate = STATE.ui.matchId
-    ? new Date((STATE.fixtures.find(f => f.id === STATE.ui.matchId) || {}).date || 0)
-    : null;
-  if (savedDate) savedDate.setHours(0,0,0,0);
-  const savedIsToday = savedDate && savedDate.getTime() === today.getTime();
-  if (todayFixture && !savedIsToday) {
-    STATE.ui.matchId = todayFixture.id;
-  }
+  // On every load, prefer today's match, then the next upcoming fixture.
+  selectClosestFixtureForToday();
 
   // First-load: if the current match has no runtime XI yet, auto-populate so the pitch isn't empty.
   if (STATE.ui.matchId) {
@@ -1603,7 +1619,8 @@ function init() {
   $('#resetFixturesBtn').addEventListener('click', () => {
     if (!confirm('Reset fixtures to defaults?')) return;
     STATE.fixtures = buildFixtures(DEFAULT_FIXTURES);
-    STATE.ui.matchId = STATE.fixtures[0]?.id;
+    selectClosestFixtureForToday();
+    if (STATE.ui.matchId) ensureXI(STATE.ui.matchId);
     save();
     render();
     fillSetupInputs();

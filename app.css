@@ -412,8 +412,25 @@ textarea { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-siz
 .marker.dragging { cursor: grabbing; box-shadow: 0 18px 40px rgba(0,0,0,0.4); z-index: 30; }
 .marker.selected { border-color: var(--color-amber); box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-amber) 60%, transparent), 0 8px 22px rgba(0,0,0,0.3); }
 .marker.setpiece-active { border-color: #ffd24a; box-shadow: 0 0 0 6px rgba(255,210,74,0.5), 0 10px 30px rgba(0,0,0,0.4); transform: translate(-50%, -50%) scale(1.08); z-index: 25; }
-.marker .name { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.marker .pos { display: block; margin-top: 0.1rem; font-size: 0.55em; letter-spacing: 0.1em; opacity: 0.92; }
+.marker .name {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: clip;
+  white-space: nowrap;
+  font-size: 1.45rem;
+  line-height: 1;
+  font-weight: 900;
+  letter-spacing: 0;
+}
+.marker .pos {
+  display: block;
+  margin-top: 0.15rem;
+  font-size: 0.62rem;
+  line-height: 1;
+  letter-spacing: 0;
+  opacity: 0.92;
+}
 .marker .badge {
   position: absolute;
   bottom: -6px; right: -6px;
@@ -458,8 +475,8 @@ textarea { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-siz
   border-width: 3px;
   padding: 0.25rem;
 }
-.fs .marker .name { font-size: 0.95em; }
-.fs .marker .pos { font-size: 0.62em; margin-top: 0.05rem; }
+.fs .marker .name { font-size: 1.35rem; }
+.fs .marker .pos { font-size: 0.62rem; margin-top: 0.1rem; }
 
 .fs-hud-top {
   position: absolute;
@@ -729,4 +746,6 @@ textarea { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-siz
   .brand p { display: none; }
   .pitch-card { padding: var(--space-2); }
   .marker { font-size: 0.6rem; }
+  .marker .name { font-size: 1.3rem; }
+  .marker .pos { font-size: 0.58rem; }
 }

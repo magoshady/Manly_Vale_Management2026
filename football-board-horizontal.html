@@ -69,8 +69,9 @@
     .pitch-lines { position: absolute; inset: 14px; width: calc(100% - 28px); height: calc(100% - 28px); object-fit: fill; pointer-events: none; }
     .marker { position: absolute; width: 78px; height: 78px; transform: translate(-50%, -50%); border-radius: 50%; display: flex; align-items: center; justify-content: center; text-align: center; padding: 0.35rem; color: white; font-weight: 700; font-size: 0.76rem; line-height: 1.02; border: 3px solid rgba(255,255,255,0.92); box-shadow: 0 10px 24px rgba(0,0,0,0.2); touch-action: none; user-select: none; cursor: grab; background: linear-gradient(145deg, var(--marker-a), var(--marker-b)); }
     .marker.dragging { cursor: grabbing; z-index: 10; }
-    .marker span { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
-    .marker small { display: block; margin-top: 0.18rem; font-size: 0.58rem; letter-spacing: 0.04em; opacity: 0.92; }
+    .marker span { display: block; overflow: hidden; white-space: nowrap; }
+    .marker .initials { font-size: 1.55rem; line-height: 1; font-weight: 900; letter-spacing: 0; }
+    .marker small { display: block; margin-top: 0.14rem; font-size: 0.62rem; line-height: 1; letter-spacing: 0; opacity: 0.92; }
     .note { color: var(--color-text-muted); font-size: var(--text-sm); }
     @media (max-width: 1050px) {
       .layout { grid-template-columns: 1fr; }
@@ -80,6 +81,8 @@
       .app { padding: var(--space-3); }
       .summary { grid-template-columns: repeat(2, minmax(0,1fr)); }
       .marker { width: 68px; height: 68px; font-size: 0.68rem; }
+      .marker .initials { font-size: 1.35rem; }
+      .marker small { font-size: 0.58rem; }
     }
   </style>
 </head>
@@ -234,11 +237,22 @@ Vincent Templon / FWD</textarea>
       });
     }
 
-    function shortenName(name) {
-      if (name.length <= 12) return name;
-      const parts = name.split(' ');
-      if (parts.length >= 2) return `${parts[0]} ${parts[1][0]}.`;
-      return name.slice(0, 11);
+    function initialsFromName(name) {
+      const parts = (name || '').trim().split(/\s+/).filter(Boolean);
+      if (!parts.length) return '?';
+
+      const lettersFrom = (part) => {
+        const normalized = part.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        return (normalized.match(/[A-Za-z0-9]/g) || []).join('');
+      };
+
+      if (parts.length === 1) {
+        return lettersFrom(parts[0]).slice(0, 2).toUpperCase() || '?';
+      }
+
+      const first = lettersFrom(parts[0])[0] || '';
+      const last = lettersFrom(parts[parts.length - 1])[0] || '';
+      return `${first}${last}`.toUpperCase() || '?';
     }
 
     function renderAvailability() {
@@ -292,7 +306,7 @@ Vincent Templon / FWD</textarea>
       marker.style.top = `${player.y}%`;
       marker.style.setProperty('--marker-a', player.colors[0]);
       marker.style.setProperty('--marker-b', player.colors[1]);
-      marker.innerHTML = `<span>${shortenName(player.name)}<small>${player.role}</small></span>`;
+      marker.innerHTML = `<span><span class="initials">${initialsFromName(player.name)}</span><small>${player.role}</small></span>`;
       marker.setAttribute('aria-label', `${player.name} ${player.role}`);
       marker.addEventListener('pointerdown', event => startDrag(event, player.id));
       return marker;
